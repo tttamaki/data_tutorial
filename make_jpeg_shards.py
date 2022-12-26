@@ -141,7 +141,7 @@ def make_shards(args):
             shard_dir_path / f'{args.shard_prefix}-dataset-size.json')
         with open(dataset_size_filename, 'w') as fp:
             json.dump({
-                "dataset size": sink.get_total,
+                "dataset size": sink.get_total(),
             }, fp)
 
         sink.close()
