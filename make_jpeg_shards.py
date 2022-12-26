@@ -32,6 +32,10 @@ class MyManager(SyncManager):
 
 def worker(file_path, lock, pbar, sink, class_to_idx):
 
+    # 'ForkPoolWorker-21' --> 21
+    # https://docs.python.org/ja/3/library/multiprocessing.html#multiprocessing.Process.name
+    worker_id = int(current_process().name.split('-')[-1])
+
     #
     # process
     #
@@ -65,7 +69,7 @@ def worker(file_path, lock, pbar, sink, class_to_idx):
         pbar.update(1)
         pbar.set_postfix_str(
             f'shard {sink.get_shards()} '
-            f'worker {current_process().name[-1]}'
+            f'worker {worker_id}'
         )
 
 
