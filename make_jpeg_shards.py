@@ -104,7 +104,7 @@ def make_shards(args):
             total=n_samples,
             position=0,
         )
-        pbar.set_description("Main process")
+        pbar.set_description('Main process')
         sink = manager.Sink(
             pattern=shard_filename,
             maxsize=args.max_size,
@@ -141,7 +141,9 @@ def make_shards(args):
             shard_dir_path / f'{args.shard_prefix}-dataset-size.json')
         with open(dataset_size_filename, 'w') as fp:
             json.dump({
-                "dataset size": sink.get_total(),
+                'dataset size': sink.get_total(),
+                'num_classes': len(class_to_idx),
+                'class_to_idx': class_to_idx,
             }, fp)
 
         sink.close()
