@@ -1,16 +1,18 @@
 
-import torch.nn as nn
-import torch
+from multiprocessing.managers import SyncManager
+from pathlib import Path
+from PIL import Image
+from torch import optim, nn
+from torchvision import transforms, models
 from tqdm import tqdm
 import argparse
-import json
-import webdataset as wds
-from pathlib import Path
-from multiprocessing.managers import SyncManager
-from PIL import Image
 import io
-from torchvision import transforms, models
-from torch import optim
+import json
+import torch
+import webdataset as wds
+
+import warnings
+warnings.simplefilter('ignore', UserWarning)
 
 
 class AverageMeter(object):
@@ -118,7 +120,7 @@ def make_dataset(
     dataset = dataset.map_tuple(
         lambda x: transform(x) if transform is not None else x,
         add_worker_id,
-        lambda x: x.split('.')[0].split('-')[-1],  # 'test-00.tar' --> '00'
+        lambda x: int(x.split('.')[0].split('-')[-1]),  # 'test-00.tar' --> 0
     )
 
     return dataset
@@ -257,7 +259,9 @@ if __name__ == '__main__':
     parser.add_argument('-w', '--num_workers', type=int, default=2,
                         help='number of dataloader workders. default 2')
     parser.add_argument('-g', '--gpu', nargs='+', type=int, default=0,
-                        help='GPU No. to be used for model. default 0')
+                        help='GPU ids to be used. '
+                        'int ("0", "1") or list of int ("1 2", "0 1 2"). '
+                        'default "0"')
 
     parser.add_argument('--n_epochs', type=int, default=10,
                         help='number of epochs. default to 10')
