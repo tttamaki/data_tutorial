@@ -13,6 +13,51 @@ from torchvision import transforms, models
 from torch import optim
 
 
+class AverageMeter(object):
+    """
+    Computes and stores the average and current value
+    Imported from https://github.com/pytorch/examples/blob/cedca7729fef11c91e28099a0e45d7e98d03b66d/imagenet/main.py#L363-L380
+    https://github.com/machine-perception-robotics-group/attention_branch_network/blob/ced1d97303792ac6d56442571d71bb0572b3efd8/utils/misc.py#L59
+    """
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.value = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, value, bs=1):
+        if isinstance(value, torch.Tensor):
+            value = value.item()
+        self.value = value
+        self.sum += value * bs
+        self.count += bs
+        self.avg = self.sum / self.count
+
+
+def accuracy(output, target, topk=(1,)):
+    """
+    Computes the accuracy over the k top predictions for the specified values of k
+    https://github.com/pytorch/examples/blob/cedca7729fef11c91e28099a0e45d7e98d03b66d/imagenet/main.py#L411
+    """
+    with torch.no_grad():
+        maxk = max(topk)
+        batch_size = target.size(0)
+
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+        res = []
+        for k in topk:
+            correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
+            res.append(correct_k.mul_(100.0 / batch_size))
+        return res if len(res) > 1 else res[0]
+
+
 def info_from_json(shard_path):
     json_file = Path(shard_path).glob('*.json')
     json_file = str(next(json_file))  # get the first json file
@@ -35,10 +80,11 @@ class MyModel(nn.Module):
         gpu_id = torch.tensor([gpu_id] * bs, device=im.device)
 
         with lock:
-            print('| GPU      ', gpu_id)
+            print('|-GPU------', gpu_id, '-----------------')
             print('| worker id', batch_dic['read worker id'])
             print('| shard    ', batch_dic['url'])
             print('| count    ', batch_dic['count'])
+            print('| label    ', batch_dic['label'])
 
         return self.model(im), gpu_id
 
@@ -72,7 +118,7 @@ def make_dataset(
     dataset = dataset.map_tuple(
         lambda x: transform(x) if transform is not None else x,
         add_worker_id,
-        lambda x: x,
+        lambda x: x.split('.')[0].split('-')[-1],  # 'test-00.tar' --> '00'
     )
 
     return dataset
@@ -90,8 +136,10 @@ def my_collate_fn(batch):
 def main(args):
 
     assert torch.cuda.is_available(), 'cpu is not supported'
-    assert isinstance(args.gpu, int), 'multi gpu is not supported'
-    device = torch.device('cuda:' + str(args.gpu))
+    if isinstance(args.gpu, int):
+        device = torch.device('cuda:' + str(args.gpu))
+    elif isinstance(args.gpu, list):
+        device = torch.device('cuda:' + str(args.gpu[0]))  # the 1st device
 
     shards_path = [
         str(path) for path in Path(args.shard_path).glob('*.tar')
@@ -123,16 +171,24 @@ def main(args):
         collate_fn=my_collate_fn)
 
     dataset_size, num_classes = info_from_json(args.shard_path)
-    num_batches = dataset_size // (args.batch_size * args.num_workers)
+    num_batches = dataset_size // args.batch_size + 1
+    # num_batches = dataset_size // (args.batch_size * args.num_workers)
     print("# batches per worker = ", num_batches)
-    sample_loader.length = num_batches * args.num_workers
-    sample_loader = sample_loader.repeat(2).slice(sample_loader.length)
+    sample_loader.length = num_batches
+    # sample_loader.length = num_batches * args.num_workers
+    # sample_loader = sample_loader.repeat(2).slice(sample_loader.length)
 
     model = MyModel(num_classes=num_classes)
+    if isinstance(args.gpu, list):
+        model = torch.nn.DataParallel(model, device_ids=args.gpu)
     model.to(device)
+    model.train()
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(),
                            lr=args.lr, betas=args.betas)
+
+    train_loss = AverageMeter()
+    train_top1 = AverageMeter()
 
     with tqdm(range(args.n_epochs)) as pbar_epoch, \
             SyncManager() as manager:
@@ -158,17 +214,32 @@ def main(args):
                     gpu_id = im.get_device()
 
                     with lock:
-                        print(f'\n{i}-th loop on GPU {gpu_id}:')
+                        print('==========================')
+                        print(f'loop {i} on GPU {gpu_id}:')
                         print('worker id', batch_dic['read worker id'])
                         print('shard    ', batch_dic['url'])
                         print('count    ', batch_dic['count'])
+                        print('label    ', batch_dic['label'])
 
+                    optimizer.zero_grad()
                     output, gpu_id = model(im, batch_dic, lock)
-                    print('GPU      ', gpu_id)
+                    print('proc GPU ', gpu_id)
 
                     loss = criterion(output, label)
                     loss.backward()
                     optimizer.step()
+
+                    bs = im.size(0)
+                    train_loss.update(loss, bs)
+                    train_top1.update(accuracy(output, label), bs)
+
+                    pbar_batch.set_postfix_str(
+                        ' loss={:6.04f}/{:6.04f}'
+                        ' top1={:6.04f}/{:6.04f}'
+                        ''.format(
+                            train_loss.value, train_loss.avg,
+                            train_top1.value, train_top1.avg,
+                        ))
 
 
 if __name__ == '__main__':
@@ -185,7 +256,7 @@ if __name__ == '__main__':
                         help='batch size. default 3')
     parser.add_argument('-w', '--num_workers', type=int, default=2,
                         help='number of dataloader workders. default 2')
-    parser.add_argument('-g', '--gpu', type=int, default=0,
+    parser.add_argument('-g', '--gpu', nargs='+', type=int, default=0,
                         help='GPU No. to be used for model. default 0')
 
     parser.add_argument('--n_epochs', type=int, default=10,

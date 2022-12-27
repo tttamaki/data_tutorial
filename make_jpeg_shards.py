@@ -8,6 +8,7 @@ import random
 from webdataset import ShardWriter
 from multiprocessing import Pool, current_process
 from multiprocessing.managers import SyncManager
+from PIL import Image
 
 
 class MyShardWriter(ShardWriter):
@@ -20,7 +21,7 @@ class MyShardWriter(ShardWriter):
         return self.shard
 
     def get_count(self):
-        return self.count
+        return self.count if self.count < self.maxcount else 0
 
     def get_total(self):
         return self.total
@@ -44,6 +45,11 @@ def worker(file_path, lock, pbar, sink, class_to_idx):
     category_name = file_path.parent.name  # 'Dog': str
     label = class_to_idx[category_name]  # 1: int
     key_str = category_name + '/' + file_path.stem  # 'Dog/10247': str
+
+    try:
+        Image.open(str(file_path))  # check if corrupted
+    except BaseException:
+        return  # skip when error
 
     with open(str(file_path), 'rb') as raw_bytes:
         buffer = raw_bytes.read()
