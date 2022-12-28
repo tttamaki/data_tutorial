@@ -86,7 +86,7 @@ class MyModel(nn.Module):
             print('| worker id', batch_dic['read worker id'])
             print('| shard    ', batch_dic['url'])
             print('| count    ', batch_dic['count'])
-            print('| label    ', batch_dic['label'])
+            # print('| label    ', batch_dic['label'])
 
         return self.model(im), gpu_id
 
@@ -174,17 +174,16 @@ def main(args):
 
     dataset_size, num_classes = info_from_json(args.shard_path)
     num_batches = dataset_size // args.batch_size + 1
-    # num_batches = dataset_size // (args.batch_size * args.num_workers)
-    print("# batches per worker = ", num_batches)
+
     sample_loader.length = num_batches
-    # sample_loader.length = num_batches * args.num_workers
-    # sample_loader = sample_loader.repeat(2).slice(sample_loader.length)
+    sample_loader = sample_loader.with_length(num_batches)
 
     model = MyModel(num_classes=num_classes)
     if isinstance(args.gpu, list):
         model = torch.nn.DataParallel(model, device_ids=args.gpu)
     model.to(device)
     model.train()
+
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(),
                            lr=args.lr, betas=args.betas)
@@ -215,6 +214,8 @@ def main(args):
                     batch_dic['url'] = urls
                     gpu_id = im.get_device()
 
+                    optimizer.zero_grad()
+
                     with lock:
                         print('==========================')
                         print(f'loop {i} on GPU {gpu_id}:')
@@ -223,7 +224,6 @@ def main(args):
                         print('count    ', batch_dic['count'])
                         print('label    ', batch_dic['label'])
 
-                    optimizer.zero_grad()
                     output, gpu_id = model(im, batch_dic, lock)
                     print('proc GPU ', gpu_id)
 
