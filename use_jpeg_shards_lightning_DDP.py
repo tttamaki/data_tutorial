@@ -132,13 +132,14 @@ class MyLightningModel(pl.LightningModule):
         with self.lock:
             print('==========================')
             print(f'loop {batch_idx} on GPU {gpu_id}:')
-            # print('worker id', batch_dic['read worker id'])
-            # print('shard    ', batch_dic['url'])
-            # print('count    ', batch_dic['count'])
+            print('worker id', batch_dic['read worker id'])
+            print('shard    ', batch_dic['url'])
+            print('count    ', batch_dic['count'])
             # print('label    ', batch_dic['label'])
 
             output, gpu_id = self.model(im, batch_dic, self.lock)
-            # print('proc GPU ', gpu_id)
+
+            print('proc GPU ', gpu_id)
 
         loss = self.criterion(output, label)
         return loss
@@ -202,7 +203,6 @@ def main(args):
 
     assert torch.cuda.is_available(), 'cpu is not supported'
     assert isinstance(args.gpu, list), 'single gpu is not supported'
-    # device = torch.device('cuda:' + str(args.gpu[0]))  # the 1st device
 
     shards_path = [
         str(path) for path in Path(args.shard_path).glob('*.tar')
@@ -235,25 +235,24 @@ def main(args):
 
     dataset_size, num_classes = info_from_json(args.shard_path)
     num_batches = dataset_size // (args.batch_size * len(args.gpu))
-    print("# batches per worker = ", num_batches)
+
     sample_loader.length = num_batches
+    sample_loader = sample_loader.with_length(num_batches)
+
     sample_loader = sample_loader.repeat(nbatches=num_batches)
-    sample_loader = sample_loader.slice(sample_loader.length)
+    sample_loader = sample_loader.slice(num_batches)
 
     model = MyModel(num_classes=num_classes)
 
     with SyncManager() as manager:
-        # with SyncManager(authkey=b'this is the key') as manager:
 
         lock = manager.RLock()
         model_lightning = MyLightningModel(model, lock, args)
 
         trainer = pl.Trainer(
             devices=args.gpu,
-            accelerator="gpu",
-            # strategy=DDPStrategy(),
-            strategy="ddp",
-            # strategy="ddp_find_unused_parameters_false",
+            accelerator='gpu',
+            strategy='ddp',  # 'ddp_find_unused_parameters_false',
             max_epochs=args.n_epochs)
         trainer.fit(
             model=model_lightning,

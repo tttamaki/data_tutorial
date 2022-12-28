@@ -1,5 +1,5 @@
 dataset/
 test_shards/
+shards_cats_dogs/
 *.tar
-*.json
 lightning_logs/

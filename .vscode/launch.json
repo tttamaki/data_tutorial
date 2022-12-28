@@ -1,0 +1,120 @@
+{
+    // IntelliSense を使用して利用可能な属性を学べます。
+    // 既存の属性の説明をホバーして表示します。
+    // 詳細情報は次を確認してください: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "use jpeg shards single GPU",
+            "type": "python",
+            "request": "launch",
+            "program": "use_jpeg_shards_singe_or_DP.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "CUDA_LAUNCH_BLOCKING": "1",
+            },
+            "args": [
+                "-s",
+                "./shards_cats_dogs/",
+                "-g",
+                "0",
+                "-b",
+                "7",
+                "-w",
+                "2"
+            ]
+        },
+        {
+            "name": "use jpeg shards DP",
+            "type": "python",
+            "request": "launch",
+            "program": "use_jpeg_shards_singe_or_DP.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "CUDA_LAUNCH_BLOCKING": "1",
+            },
+            "args": [
+                "-s",
+                "./shards_cats_dogs/",
+                "-g",
+                "0",
+                "1",
+                "2",
+                "-b",
+                "14",
+                "-w",
+                "2"
+            ]
+        },
+        {
+            "name": "use jpeg shards DDP",
+            "type": "python",
+            "request": "launch",
+            "program": "use_jpeg_shards_lightning_DDP.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "CUDA_LAUNCH_BLOCKING": "1",
+            },
+            "args": [
+                "-s",
+                "./shards_cats_dogs/",
+                "-g",
+                "0",
+                "1",
+                "2",
+                "-b",
+                "7",
+                "-w",
+                "2"
+            ]
+        },
+        {
+            "name": "make jpeg shards w/ shuffle",
+            "type": "python",
+            "request": "launch",
+            "program": "make_jpeg_shards.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "CUDA_LAUNCH_BLOCKING": "1",
+            },
+            "args": [
+                "-d",
+                "./dataset/cats_dogs/PetImages/",
+                "-s",
+                "./shards_cats_dogs/",
+                "--max_size",
+                "100000000",
+                "--max_count",
+                "1000",
+                "-w",
+                "8"
+            ]
+        },
+        {
+            "name": "make jpeg shards w/o shuffle",
+            "type": "python",
+            "request": "launch",
+            "program": "make_jpeg_shards.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "CUDA_LAUNCH_BLOCKING": "1",
+            },
+            "args": [
+                "-d",
+                "./dataset/cats_dogs/PetImages/",
+                "-s",
+                "./shards_cats_dogs/",
+                "--no_shuffle",
+                "--max_size",
+                "100000000",
+                "--max_count",
+                "1000"
+            ]
+        },
+    ]
+}
