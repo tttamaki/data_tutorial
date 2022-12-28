@@ -8,12 +8,18 @@ import argparse
 import io
 import json
 import pytorch_lightning as pl
-from pytorch_lightning.strategies import DDPStrategy
+# from pytorch_lightning.strategies import DDPStrategy
 import torch
 import webdataset as wds
+import torch.distributed as dist
+import multiprocessing
 
 import warnings
 warnings.simplefilter('ignore', UserWarning)
+
+# https://bugs.python.org/issue7503
+# https://stackoverflow.com/questions/28318502/pythonusing-multiprocessing-manager-in-process-pool
+multiprocessing.current_process().authkey = b'this is the key'
 
 
 class AverageMeter(object):
@@ -96,15 +102,26 @@ class MyLightningModel(pl.LightningModule):
     def __init__(self, model, lock, args):
         super().__init__()
         self.model = model
-        self.lock = lock
         self.args = args
         self.criterion = nn.CrossEntropyLoss()
+        self.lock_list = [lock]
+        self.is_lock_set = False
 
     def forward(self, im):
         output = self.model(im)
         return output
 
+    def set_lock(self):
+        if self.is_lock_set:
+            return
+
+        self.rank = dist.get_rank()
+        dist.broadcast_object_list(self.lock_list, src=0, device=None)
+        self.lock = self.lock_list[0]
+        self.is_lock_set = True
+
     def training_step(self, batch, batch_idx):
+        self.set_lock()
 
         im, batch_dic, urls = batch
         label = batch_dic['label']
@@ -135,6 +152,8 @@ class MyLightningModel(pl.LightningModule):
 def add_worker_id(sample):
     info = torch.utils.data.get_worker_info()
     sample['read worker id'] = info.id
+    sample['rank'] = dist.get_rank()
+    sample['world size'] = dist.get_world_size()
     return sample
 
 
@@ -149,7 +168,10 @@ def make_dataset(
     transform=None,
 ):
 
-    dataset = wds.WebDataset(shards_url, nodesplitter=wds.split_by_node)
+    dataset = wds.WebDataset(
+        shards_url,
+        nodesplitter=wds.split_by_node
+    )
     if shuffle_buffer_size > 0:
         dataset = dataset.shuffle(shuffle_buffer_size)
     dataset = dataset.decode('torchrgb')  # jpg --> tensor(uint8, CHW)
@@ -212,14 +234,16 @@ def main(args):
         collate_fn=my_collate_fn)
 
     dataset_size, num_classes = info_from_json(args.shard_path)
-    num_batches = dataset_size // (args.batch_size * args.num_workers)
+    num_batches = dataset_size // (args.batch_size * len(args.gpu))
     print("# batches per worker = ", num_batches)
-    sample_loader.length = num_batches * args.num_workers
-    # sample_loader = sample_loader.repeat(2).slice(sample_loader.length)
+    sample_loader.length = num_batches
+    sample_loader = sample_loader.repeat(nbatches=num_batches)
+    sample_loader = sample_loader.slice(sample_loader.length)
 
     model = MyModel(num_classes=num_classes)
 
     with SyncManager() as manager:
+        # with SyncManager(authkey=b'this is the key') as manager:
 
         lock = manager.RLock()
         model_lightning = MyLightningModel(model, lock, args)
@@ -227,8 +251,8 @@ def main(args):
         trainer = pl.Trainer(
             devices=args.gpu,
             accelerator="gpu",
-            strategy=DDPStrategy(),
-            # strategy="ddp",
+            # strategy=DDPStrategy(),
+            strategy="ddp",
             # strategy="ddp_find_unused_parameters_false",
             max_epochs=args.n_epochs)
         trainer.fit(

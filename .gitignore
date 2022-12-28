@@ -2,3 +2,4 @@ dataset/
 test_shards/
 *.tar
 *.json
+lightning_logs/
