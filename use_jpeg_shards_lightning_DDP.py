@@ -9,10 +9,12 @@ import io
 import json
 import pytorch_lightning as pl
 # from pytorch_lightning.strategies import DDPStrategy
+from pytorch_lightning.callbacks.progress import TQDMProgressBar
 import torch
 import webdataset as wds
 import torch.distributed as dist
 import multiprocessing
+from tqdm import tqdm
 
 import warnings
 warnings.simplefilter('ignore', UserWarning)
@@ -20,31 +22,6 @@ warnings.simplefilter('ignore', UserWarning)
 # https://bugs.python.org/issue7503
 # https://stackoverflow.com/questions/28318502/pythonusing-multiprocessing-manager-in-process-pool
 multiprocessing.current_process().authkey = b'this is the key'
-
-
-class AverageMeter(object):
-    """
-    Computes and stores the average and current value
-    Imported from https://github.com/pytorch/examples/blob/cedca7729fef11c91e28099a0e45d7e98d03b66d/imagenet/main.py#L363-L380
-    https://github.com/machine-perception-robotics-group/attention_branch_network/blob/ced1d97303792ac6d56442571d71bb0572b3efd8/utils/misc.py#L59
-    """
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.value = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, value, bs=1):
-        if isinstance(value, torch.Tensor):
-            value = value.item()
-        self.value = value
-        self.sum += value * bs
-        self.count += bs
-        self.avg = self.sum / self.count
 
 
 def accuracy(output, target, topk=(1,)):
@@ -98,6 +75,15 @@ class MyModel(nn.Module):
         return self.model(im), gpu_id
 
 
+class MyProgressBar(TQDMProgressBar):
+    # https://github.com/Lightning-AI/lightning/blob/f576ed3bbda95a5045edacc49146a3f1cdcd892a/src/pytorch_lightning/callbacks/progress/base.py#L234
+    def get_metrics(self, trainer, model):
+        # don't show the version number
+        items = super().get_metrics(trainer, model)
+        items.pop('v_num', None)
+        return items
+
+
 class MyLightningModel(pl.LightningModule):
     def __init__(self, model, lock, args):
         super().__init__()
@@ -117,7 +103,8 @@ class MyLightningModel(pl.LightningModule):
 
         self.rank = dist.get_rank()
         dist.broadcast_object_list(self.lock_list, src=0, device=None)
-        self.lock = self.lock_list[0]
+        self.lock = self.lock_list[0]  # shared lock for DDP
+        tqdm.set_lock(self.lock)  # global lock of tqdm in lightning
         self.is_lock_set = True
 
     def training_step(self, batch, batch_idx):
@@ -142,6 +129,10 @@ class MyLightningModel(pl.LightningModule):
             print('proc GPU ', gpu_id)
 
         loss = self.criterion(output, label)
+
+        top1 = accuracy(output, label)
+        self.log('train top1', top1, prog_bar=True)
+
         return loss
 
     def configure_optimizers(self):
@@ -253,7 +244,10 @@ def main(args):
             devices=args.gpu,
             accelerator='gpu',
             strategy='ddp',  # 'ddp_find_unused_parameters_false',
-            max_epochs=args.n_epochs)
+            max_epochs=args.n_epochs,
+            callbacks=[
+                MyProgressBar(),
+            ])
         trainer.fit(
             model=model_lightning,
             train_dataloaders=sample_loader)
