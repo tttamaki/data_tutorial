@@ -48,7 +48,7 @@ def worker(file_path, lock, pbar, sink, class_to_idx):
 
     try:
         Image.open(str(file_path))  # check if corrupted
-    except BaseException:
+    except Exception:
         return  # skip when error
 
     with open(str(file_path), 'rb') as raw_bytes:
