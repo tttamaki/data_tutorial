@@ -53,6 +53,18 @@ def info_from_json(shard_path):
     return info_dic['dataset size'], info_dic['num_classes']
 
 
+def get_transform():
+    return transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.Lambda(lambda x: x / 255.),  # already tensor
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
+    ])
+
+
 class MyModel(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
@@ -156,6 +168,7 @@ def my_jpg_decoder(sample):
 
 def make_dataset(
     shards_url,
+    batch_size,
     shuffle_buffer_size=-1,
     transform=None,
 ):
@@ -177,6 +190,9 @@ def make_dataset(
         add_worker_id,
         lambda x: int(x.split('.')[0].split('-')[-1]),  # 'test-00.tar' --> 0
     )
+    dataset = dataset.batched(
+        batch_size,
+        partial=False)
 
     return dataset
 
@@ -200,23 +216,13 @@ def main(args):
         if not path.is_dir()
     ]
 
-    transform = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.Lambda(lambda x: x / 255.),  # already tensor
-        transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225]
-        )
-    ])
+    transform = get_transform()
 
     dataset = make_dataset(
         shards_url=shards_path,
+        batch_size=args.batch_size,
         shuffle_buffer_size=args.shuffle,
         transform=transform)
-    dataset = dataset.batched(
-        args.batch_size,
-        partial=False)
     sample_loader = wds.WebLoader(
         dataset,
         batch_size=None,
