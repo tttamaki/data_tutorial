@@ -199,6 +199,9 @@ def main(args):
         for epoch in pbar_epoch:
             pbar_epoch.set_description("[Train] epoch: %d" % epoch)
 
+            train_loss.reset()
+            train_top1.reset()
+
             with tqdm(enumerate(sample_loader),
                       total=sample_loader.length,
                       leave=True,
