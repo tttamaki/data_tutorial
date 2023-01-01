@@ -109,11 +109,6 @@ def add_worker_id(sample):
     return sample
 
 
-def my_jpg_decoder(sample):
-    img = Image.open(io.BytesIO(sample))
-    return img
-
-
 def make_dataset(
     shards_url,
     batch_size,
@@ -225,13 +220,12 @@ def main(args):
 
                     optimizer.zero_grad()
 
-                    with lock:
-                        print('==========================')
-                        print(f'loop {i} on GPU {gpu_id}:')
-                        print('worker id', batch_dic['read worker id'])
-                        print('shard    ', batch_dic['url'])
-                        print('count    ', batch_dic['count'])
-                        print('label    ', batch_dic['label'])
+                    print('==========================')
+                    print(f'loop {i} on GPU {gpu_id}:')
+                    print('worker id', batch_dic['read worker id'])
+                    print('shard    ', batch_dic['url'])
+                    print('count    ', batch_dic['count'])
+                    print('label    ', batch_dic['label'])
 
                     output, gpu_id = model(im, batch_dic, lock)
                     print('proc GPU ', gpu_id)
