@@ -171,6 +171,7 @@ def main(args):
         batch_size=None,
         shuffle=False,
         num_workers=args.num_workers,
+        pin_memory=True,
         collate_fn=my_collate_fn)
 
     dataset_size, num_classes = info_from_json(args.shard_path)
