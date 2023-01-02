@@ -91,11 +91,6 @@ class MyModel(nn.Module):
         return self.model(im)
 
 
-def my_jpg_decoder(sample):
-    img = Image.open(io.BytesIO(sample))
-    return img
-
-
 def make_dataset(
     shards_url,
     batch_size,
