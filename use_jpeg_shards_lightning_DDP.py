@@ -1,14 +1,11 @@
 
 from multiprocessing.managers import SyncManager
 from pathlib import Path
-from PIL import Image
 from torch import optim, nn
 from torchvision import transforms, models
 import argparse
-import io
 import json
 import pytorch_lightning as pl
-# from pytorch_lightning.strategies import DDPStrategy
 from pytorch_lightning.callbacks.progress import TQDMProgressBar
 import torch
 import webdataset as wds
@@ -149,7 +146,7 @@ class MyLightningModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(),
-                               lr=args.lr, betas=args.betas)
+                               lr=self.args.lr, betas=self.args.betas)
         return optimizer
 
 
@@ -245,7 +242,9 @@ def main(args):
         trainer = pl.Trainer(
             devices=args.gpu,
             accelerator='gpu',
-            strategy='ddp',  # 'ddp_find_unused_parameters_false',
+            # strategy='ddp',
+            strategy='ddp_find_unused_parameters_false',
+            # strategy='ddp_spawn',
             max_epochs=args.n_epochs,
             callbacks=[
                 MyProgressBar(),

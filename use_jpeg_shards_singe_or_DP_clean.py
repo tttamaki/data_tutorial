@@ -1,11 +1,9 @@
 
 from pathlib import Path
-from PIL import Image
 from torch import optim, nn
 from torchvision import transforms, models
 from tqdm import tqdm
 import argparse
-import io
 import json
 import torch
 import webdataset as wds

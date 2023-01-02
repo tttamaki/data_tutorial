@@ -1,10 +1,8 @@
 
 from pathlib import Path
-from PIL import Image
 from torch import optim, nn
 from torchvision import transforms, models
 import argparse
-import io
 import json
 import pytorch_lightning as pl
 # from pytorch_lightning.strategies import DDPStrategy
@@ -103,7 +101,7 @@ class MyLightningModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(),
-                               lr=args.lr, betas=args.betas)
+                               lr=self.args.lr, betas=self.args.betas)
         return optimizer
 
 
