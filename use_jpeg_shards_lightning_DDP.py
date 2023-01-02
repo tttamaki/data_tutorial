@@ -80,6 +80,8 @@ class MyModel(nn.Module):
             print('| shard    ', batch_dic['url'])
             print('| count    ', batch_dic['count'])
             # print('| label    ', batch_dic['label'])
+            print('| rank     ', batch_dic['rank'])
+            print('| worldsize', batch_dic['world size'])
 
         return self.model(im), gpu_id
 
@@ -127,11 +129,13 @@ class MyLightningModel(pl.LightningModule):
 
         with self.lock:
             print('==========================')
-            print(f'loop {batch_idx} on GPU {gpu_id}:')
+            print(f'loop {batch_idx} on GPU {gpu_id} at rank {self.rank}:')
             print('worker id', batch_dic['read worker id'])
             print('shard    ', batch_dic['url'])
             print('count    ', batch_dic['count'])
             # print('label    ', batch_dic['label'])
+            print('rank     ', batch_dic['rank'])
+            print('worldsize', batch_dic['world size'])
 
             output, gpu_id = self.model(im, batch_dic, self.lock)
 
